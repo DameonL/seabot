@@ -28,13 +28,12 @@ const bundleOptimizations = {
 
 const tsLoaderRules = {
     test: /\.ts?$/,
-    use: "ts-loader",
-    exclude: /node_modules/,
+    use: "ts-loader"
 };
 
 const outputFormatting = {
     filename: "[name].js",
-    path: path.resolve(__dirname, "dist"),
+    path: path.resolve(__dirname, "../deploy"),
     chunkFilename: "[name].[contenthash].js",
 };
 
@@ -56,7 +55,8 @@ const sharedConfig = {
 
 const package_patterns = [
     "package.json",
-    "package-lock.json"
+    "package-lock.json",
+    ".env"
 ]
 
 const prodWebpackConfig = {
@@ -64,6 +64,12 @@ const prodWebpackConfig = {
     name: "prod",
     ...sharedConfig,
     plugins: [
+        new CopyPlugin({
+            patterns: [
+                ...package_patterns,
+                "src/seabotConfig.json",
+            ],
+        }),
         new CopyPlugin({
             patterns: [
                 ...package_patterns,

@@ -1,0 +1,32 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "vite build",
+    "dev": "nodemon"
+  },
+  "nodemonConfig": {
+    "ext": "ts,js,json,tsx,jsx,html",
+    "delay": "2",
+    "watch": [
+      "src",
+      "package.json",
+      "package-lock.json",
+      "tsconfig.json"
+    ],
+    "exec": "npm run build"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.0.3",
+    "preact": "^10.11.3"
+  },
+  "devDependencies": {
+    "copy-files-from-to": "^3.6.0",
+    "nodemon": "^2.0.20",
+    "vite": "^4.0.2"
+  }
+}

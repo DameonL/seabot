@@ -1,14 +1,15 @@
 import { TextChannel, ActivityType, Events } from "discord.js";
 import { exit } from "process";
 
-import scheduledTasks from "./schedules/";
 import loadConfiguration from "./configuration/loadConfiguration";
+import scheduledTasks from "./schedules";
 
 import DiscordBot from "./discord/DiscordBot";
 import DiscordEventRouter from "./discord/DiscordEventRouter";
-import ExpressServer from "./ExpressServer";
+import ExpressServer from "./web/ExpressServer";
 import ISeabotConfig from "./configuration/ISeabotConfig";
 import TaskScheduler from "./schedules/TaskScheduler";
+import StatMonitor from "./stats/StatMonitor";
 
 import { Environment, GuildIds } from "./utils/constants";
 import { handleVoiceStatusUpdate } from "./functions/voiceChannelManagement";
@@ -28,6 +29,7 @@ async function startServer() {
   startExpressServer();
   discordBot = new DiscordBot();
   await startDiscordBot();
+  StatMonitor.start();
 }
 
 async function startDiscordBot() {
