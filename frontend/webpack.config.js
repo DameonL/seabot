@@ -1,6 +1,5 @@
 const path = require("path");
-const nodeExternals = require("webpack-node-externals");
-const CopyPlugin = require("copy-webpack-plugin");
+const HtmlWebpackPlugin = require("html-webpack-plugin");
 
 const bundleOptimizations = {
   runtimeChunk: "single",
@@ -25,55 +24,46 @@ const bundleOptimizations = {
 };
 
 const tsLoaderRules = {
-  test: /\.ts?$/,
+  test: /\.tsx?$/,
   use: "ts-loader",
 };
 
 const outputFormatting = {
   filename: "[name].js",
-  path: path.resolve(__dirname, "../deploy"),
+  path: path.resolve(__dirname, "../deploy/public"),
   chunkFilename: "[name].[contenthash].js",
 };
 
 const sharedConfig = {
   entry: {
-    seabot: "./src/server.ts",
+    frontend: "./src/index.ts",
   },
-  target: "node",
-  externals: [nodeExternals()],
+  target: "web",
   module: {
     rules: [tsLoaderRules],
   },
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: "./src/index.html"
+    })
+  ],
   resolve: {
-    extensions: [".ts", ".js"],
+    extensions: [".ts", ".js", ".json", ".tsx", ".jsx"],
   },
   output: outputFormatting,
   optimization: bundleOptimizations,
 };
 
-const package_patterns = ["package.json", "package-lock.json", ".env"];
-
 const prodWebpackConfig = {
   mode: "production",
   name: "prod",
   ...sharedConfig,
-  plugins: [
-    new CopyPlugin({
-      patterns: [...package_patterns, "src/seabotConfig.json"],
-    }),
-  ],
 };
 
 const devWebpackConfig = {
   mode: "development",
   name: "dev",
   ...sharedConfig,
-  plugins: [
-    new CopyPlugin({
-      // allows us to copy different config files to dist at build time
-      patterns: [...package_patterns, { from: "src/devConfig.json", to: "seabotConfig.json" }],
-    }),
-  ],
 };
 
 module.exports = [prodWebpackConfig, devWebpackConfig];

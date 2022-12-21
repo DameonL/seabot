@@ -27,8 +27,11 @@
     "@types/node-fetch": "^2.5.8",
     "@types/node-hue-api": "^2.3.2",
     "@types/underscore": "^1.11.0",
+    "babel-loader": "^9.1.0",
     "copy-files-from-to": "^3.6.0",
     "copy-webpack-plugin": "^11.0.0",
+    "html-loader": "^4.2.0",
+    "html-webpack-plugin": "^5.5.0",
     "preact": "^10.11.3",
     "rimraf": "^3.0.2",
     "ts-loader": "^9.4.2",
@@ -48,7 +51,6 @@
     "start": "npm run seabot",
     "launch": "npm ci && npm start"
   },
-
   "repository": {
     "type": "git",
     "url": "."
