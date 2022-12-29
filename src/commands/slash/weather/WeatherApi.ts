@@ -1,21 +1,42 @@
-import { EmbedBuilder } from "discord.js";
-import moment from "moment";
 import fetch from "node-fetch";
-import { each } from "underscore";
 import { URLSearchParams } from "url";
 
 import {
-  WeeklyForecastResponse,
+  AirQualityCurrentResponse,
+  AirQualityForecastResponse,
+  Coord,
   ForecastResponse,
   GeocodeResponse,
   WeatherResponse,
-  Coord,
-  AirQualityForecastResponse,
-  AirQualityCurrentResponse,
+  WeeklyForecastResponse,
 } from "../../../models/WeatherModels";
-import { Environment, Endpoints } from "../../../utils/constants";
+import { Endpoints, Environment } from "../../../utils/constants";
+
+const windDirections = [
+  "N",
+  "NNE",
+  "NE",
+  "ENE",
+  "E",
+  "ESE",
+  "SE",
+  "SSE",
+  "S",
+  "SSW",
+  "SW",
+  "WSW",
+  "W",
+  "WNW",
+  "NW",
+  "NNW",
+];
+
 
 export default class WeatherApi {
+  public static getWindDirection(windDegrees: number): string {
+    const windAngle = Math.floor(windDegrees / 22.5 + 0.5) % 16;
+    return windDirections[windAngle];
+  }
   public static async getAirQualityByZip(zip: string) {
     const queryString = this.buildQueryStringForAirQuality(zip);
     const uri = `${Endpoints.airQualityCurrentByZipURL}?${queryString}`;
@@ -44,10 +65,8 @@ export default class WeatherApi {
     const geoInfo = (
       await WeatherApi.reverseGeoByCoord(currentWeather?.coord)
     )?.[0];
-    const embedBuilder = (title: string) =>
-      this.buildCurrentWeatherEmbed(currentWeather, title);
 
-    return { currentWeather, geoInfo, embedBuilder };
+    return { currentWeather, geoInfo };
   }
 
   public static async getWeatherForecast(location: string, weekly = false) {
@@ -65,88 +84,8 @@ export default class WeatherApi {
       return;
     }
     const geoInfo = (await this.reverseGeoByCoord(forecast?.city.coord))?.[0];
-    const embedBuilder = (title: string) =>
-      weekly
-        ? this.buildWeeklyEmbed(forecast as WeeklyForecastResponse, title)
-        : this.buildForecastEmbed(forecast as ForecastResponse, title);
 
-    return { forecast, geoInfo, embedBuilder };
-  }
-
-  private static buildCurrentWeatherEmbed(
-    response: WeatherResponse,
-    title: string
-  ): EmbedBuilder {
-    const richEmbed = new EmbedBuilder().setTitle(title);
-    var val = Math.floor(response.wind.deg / 22.5 + 0.5);
-    var arr = [
-      "N",
-      "NNE",
-      "NE",
-      "ENE",
-      "E",
-      "ESE",
-      "SE",
-      "SSE",
-      "S",
-      "SSW",
-      "SW",
-      "WSW",
-      "W",
-      "WNW",
-      "NW",
-      "NNW",
-    ];
-    const windDir = arr[val % 16];
-    const weather = `${response.weather[0].description}, ${response.main.humidity}% humidity. Winds ${windDir} @ ${response.wind.speed} mph`;
-    richEmbed.addFields([{ name: `${response.main.temp}° F`, value: weather }]);
-    return richEmbed;
-  }
-
-  private static buildForecastEmbed(
-    response: ForecastResponse,
-    title: string
-  ): EmbedBuilder {
-    const richEmbed = new EmbedBuilder().setTitle(title);
-    let { list } = response;
-    each(list.slice(0, 5), (record) => {
-      const time = moment.unix(record.dt).utcOffset(-8).format("HH:mm");
-      const weather = `${record.main.temp}° F - ${record.weather[0].description}, ${record.main.humidity}% humidity`;
-      richEmbed.addFields({
-        name: time,
-        value: weather,
-        inline: false,
-      });
-    });
-    return richEmbed;
-  }
-
-  private static buildWeeklyEmbed(
-    response: WeeklyForecastResponse,
-    title: string
-  ): EmbedBuilder {
-    const richEmbed = new EmbedBuilder().setTitle(title);
-    let { list } = response;
-    each(list.slice(0, 7), (record) => {
-      const date = moment
-        .unix(record.dt)
-        .utcOffset(-8)
-        .format("dddd MMMM Do, YYYY");
-      const weather = `
-                Low ${record.temp.min}° - High ${record.temp.max}°
-                ${record.weather[0].description}
-                Sunrise: ${moment.unix(record.sunrise).format("HH:mm")}
-                Sunset: ${moment.unix(record.sunset).format("HH:mm")}
-            `;
-      richEmbed.addFields([
-        {
-          name: date,
-          value: weather,
-          inline: false,
-        },
-      ]);
-    });
-    return richEmbed;
+    return { forecast, geoInfo };
   }
 
   private static async reverseGeoByCoord(coords: Coord) {
