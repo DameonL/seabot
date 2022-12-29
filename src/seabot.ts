@@ -1,7 +1,7 @@
 import { TextChannel, ActivityType, Events } from "discord.js";
 import { exit } from "process";
 
-import scheduledTasks from "./schedules/";
+import scheduledTasks from "./schedules";
 import loadConfiguration from "./configuration/loadConfiguration";
 
 import DiscordBot from "./discord/DiscordBot";

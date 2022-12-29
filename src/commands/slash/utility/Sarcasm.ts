@@ -2,7 +2,7 @@ import { SlashCommandBuilder } from "discord.js";
 
 import SlashCommand from "../SlashCommand";
 
-import { discordBot } from "../../../server";
+import { discordBot } from "../../../seabot";
 import { toSarcasticCase } from "../../../utils/helpers";
 
 export default new SlashCommand({

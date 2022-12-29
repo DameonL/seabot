@@ -5,7 +5,7 @@ import SlashCommand from "../SlashCommand";
 
 import { REGEX } from "../../../utils/constants";
 import { buildModActionRow } from "../../../utils/helpers";
-import { configuration } from "../../../server";
+import { configuration } from "../../../seabot";
 
 export default new SlashCommand({
   name: "report",

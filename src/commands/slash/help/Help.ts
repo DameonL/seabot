@@ -7,7 +7,7 @@ import {
 import SlashCommand from "../SlashCommand";
 
 import { Config, Strings } from "../../../utils/constants";
-import { configuration } from "../../../server";
+import { configuration } from "../../../seabot";
 
 export default new SlashCommand({
   name: "help",

@@ -23,7 +23,7 @@ import { cosmosClient } from "../db/cosmosClient";
 import { Environment } from "../utils/constants";
 import { MessageTelemetryLogger } from "../utils/MessageTelemetryLogger";
 import { minutesToMilliseconds } from "../utils/Time/conversion";
-import { configuration } from "../server";
+import { configuration } from "../seabot";
 
 let logger: MessageTelemetryLogger | null = null;
 let eventHubMessenger;

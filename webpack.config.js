@@ -40,7 +40,7 @@ const outputFormatting = {
 
 const sharedConfig = {
     entry: {
-        seabot: ["./src/server.ts"],
+        seabot: ["./src/seabot.ts"],
     },
     target: "node",
     externals: [nodeExternals()],

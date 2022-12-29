@@ -18,7 +18,7 @@ import { APIInteractionDataResolvedChannel } from "discord-api-types/v10";
 import { ButtonStyle } from "discord-api-types/v10";
 
 import { Config, Environment, REGEX } from "./constants";
-import { configuration } from "../server";
+import { configuration } from "../seabot";
 
 /**
  * Splits message content into an array of arguments by spaces.

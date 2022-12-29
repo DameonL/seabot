@@ -1,7 +1,7 @@
 import { EventDataBatch, EventHubProducerClient } from "@azure/event-hubs";
 import { Message, TextChannel } from "discord.js";
 
-import { configuration } from "../server";
+import { configuration } from "../seabot";
 
 export class MessageTelemetryLogger {
   private client: EventHubProducerClient;

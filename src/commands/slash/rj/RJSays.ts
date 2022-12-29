@@ -3,7 +3,7 @@ import { SlashCommandBuilder } from "@discordjs/builders";
 
 import SlashCommand from "../SlashCommand";
 
-import { discordBot } from "../../../server";
+import { discordBot } from "../../../seabot";
 
 const RJStrings: { [id: string]: string } = {
   sad: `<rj4>`,

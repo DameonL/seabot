@@ -9,7 +9,7 @@ import {
 
 import SlashCommand from "../SlashCommand";
 
-import { configuration } from "../../../server";
+import { configuration } from "../../../seabot";
 import { REGEX } from "../../../utils/constants";
 
 const iconBlockList = ["thinkban"];

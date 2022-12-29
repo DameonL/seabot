@@ -4,7 +4,7 @@ import {
   GuildMemberRoleManager,
 } from "discord.js";
 
-import { configuration } from "../../../server";
+import { configuration } from "../../../seabot";
 import { Database } from "../../../utils/constants";
 import { DatabaseCommand } from "./DatabaseCommand";
 import { Incident as IncidentModel } from "../../../models/DBModels";

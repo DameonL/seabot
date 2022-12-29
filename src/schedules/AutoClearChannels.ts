@@ -3,8 +3,8 @@ import { AutoDeleteConfiguration } from "../configuration/ISeabotConfig";
 
 import IScheduledTask from "./IScheduledTask";
 
-import { configuration } from "../server";
-import { discordBot } from "../server";
+import { configuration } from "../seabot";
+import { discordBot } from "../seabot";
 import { Duration } from "../utils/Time/Duration";
 
 const AutoClearChannels: IScheduledTask = {

@@ -3,7 +3,7 @@ import {
   ChannelType,
   VoiceState,
 } from "discord.js";
-import { configuration } from "../server";
+import { configuration } from "../seabot";
 import { Environment, VoiceConstants } from "../utils/constants";
 
 const { Permissions } = VoiceConstants;

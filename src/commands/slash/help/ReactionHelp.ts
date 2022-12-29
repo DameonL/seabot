@@ -3,7 +3,7 @@ import { Message, EmbedBuilder, SlashCommandBuilder } from "discord.js";
 import ReactionCommands from "../../reaction";
 import SlashCommand from "../SlashCommand";
 
-import { configuration, discordBot } from "../../../server";
+import { configuration, discordBot } from "../../../seabot";
 import { Strings } from "../../../utils/constants";
 
 export default new SlashCommand({
