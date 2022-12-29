@@ -35,7 +35,7 @@ export interface Weather {
   icon: string;
 }
 
-export interface List {
+export interface WeeklyForecastListItem {
   dt: number;
   sunrise: number;
   sunset: number;
@@ -56,7 +56,7 @@ export interface WeeklyForecastResponse {
   cod: string;
   message: number;
   cnt: number;
-  list: List[];
+  list: WeeklyForecastListItem[];
 }
 
 export interface LocalNames {
@@ -141,14 +141,17 @@ export interface WeatherResponse {
   wind: {
     deg: number;
     speed: string;
-    gust: number;
+    gust?: number;
   };
   clouds?: {
     all: number;
-  }
+  };
   snow?: {
     "1h": number;
-  }
+  };
+  rain?: {
+    "1h": number;
+  };
   sys: {
     type: number;
     id: number;
