@@ -122,21 +122,42 @@ export interface ForecastResponse {
 export interface WeatherResponse {
   cod?: string;
   coord: Coord;
+  name: string;
+  main: {
+    temp: number;
+    feels_like: number;
+    temp_min: number;
+    temp_max: number;
+    pressure: number;
+    humidity: number;
+  };
+  weather: {
+    id: number;
+    main: string;
+    description: string;
+    icon: string;
+  }[];
+  visibility: number;
   wind: {
     deg: number;
     speed: string;
+    gust: number;
   };
-  name: string;
-  main: {
-    temp: string;
-    humidity: string;
-  };
-  weather: {
-    description: string;
-  }[];
+  clouds?: {
+    all: number;
+  }
+  snow?: {
+    "1h": number;
+  }
   sys: {
+    type: number;
+    id: number;
     country: string;
+    sunrise: number;
+    sunset: number;
   };
+  timezone: number;
+  id: number;
 }
 
 export interface Category {
