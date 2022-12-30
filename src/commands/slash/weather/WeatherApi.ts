@@ -31,7 +31,6 @@ const windDirections = [
   "NNW",
 ];
 
-
 export default class WeatherApi {
   public static getWindDirection(windDegrees: number): string {
     const windAngle = Math.floor(windDegrees / 22.5 + 0.5) % 16;
