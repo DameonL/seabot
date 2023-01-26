@@ -82,7 +82,8 @@ const devWebpackConfig = {
             // allows us to copy different config files to dist at build time
             patterns: [
                 ...package_patterns,
-                { from: "src/devConfig.json", to: "seabotConfig.json" }
+                { from: "src/devConfig.json", to: "seabotConfig.json" },
+                { from: ".env" }
             ],
         }),
     ],
