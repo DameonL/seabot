@@ -1,358 +1,461 @@
 import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  EmbedBuilder,
-  ModalActionRowComponentBuilder,
-  SlashCommandBuilder,
-  TextInputBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    EmbedBuilder,
+    ModalActionRowComponentBuilder,
+    SlashCommandBuilder,
+    TextInputBuilder,
 } from "@discordjs/builders";
 
 import SlashCommand from "../SlashCommand";
 
+import { randomUUID } from "crypto";
 import {
-  ButtonInteraction,
-  ButtonStyle,
-  ChatInputCommandInteraction,
-  CommandInteraction,
-  GuildScheduledEventEntityType,
-  GuildScheduledEventPrivacyLevel,
-  InteractionCollector,
-  InteractionReplyOptions,
-  ModalBuilder,
-  ModalSubmitInteraction,
-  TextInputStyle,
+    ButtonInteraction,
+    ButtonStyle,
+    ChatInputCommandInteraction,
+    GuildScheduledEventEntityType,
+    GuildScheduledEventPrivacyLevel,
+    InteractionCollector,
+    ModalBuilder,
+    ModalSubmitInteraction,
+    TextInputStyle,
 } from "discord.js";
 import { minutesToMilliseconds } from "../../../utils/Time/conversion";
-import { discordBot } from "../../../server";
 
 interface EventUnderConstruction {
-  name: string;
-  description: string;
-  image: string;
-  entityMetadata: { location: string };
-  scheduledStartTime: Date;
-  duration: number;
-  privacyLevel: GuildScheduledEventPrivacyLevel;
+    name: string;
+    description: string;
+    image: string;
+    entityMetadata: { location: string };
+    scheduledStartTime: Date;
+    duration: number;
+    privacyLevel: GuildScheduledEventPrivacyLevel;
+    embedId: string;
+    submissionCollector?: InteractionCollector<ButtonInteraction>;
 }
 
 interface UserEventMap {
-  [userId: string]: EventUnderConstruction;
+    [userId: string]: EventUnderConstruction;
 }
 
 const eventsInProgress: UserEventMap = {};
-const embedId = "eventSubmissionEmbed";
+const editingTimeoutInMinutes = 30; // No real reason to be too restrictive on this.
 
 type GuildEventAction = "create" | "edit";
 const eventActions: GuildEventAction[] = ["create", "edit"];
 
 const eventTypes = Object.keys(GuildScheduledEventEntityType)
-  .filter((key) => !isNaN(Number(key)))
-  .map((key) => Number(key));
+    .filter((key) => !isNaN(Number(key)))
+    .map((key) => Number(key));
 
 export default new SlashCommand({
-  name: "event",
-  help: "Create or edit an event",
-  description: "asdf",
-  builder: () =>
-    new SlashCommandBuilder()
-      .setName("event")
-      .setDescription("Create a server event")
-      .addStringOption((option) => {
-        option
-          .setName("action")
-          .setDescription("Create a new event, or edit an existing event");
-        option.addChoices(
-          ...eventActions.map((eventAction) => {
-            return { name: eventAction, value: eventAction };
-          })
-        );
-        option.setRequired(true);
-        return option;
-      }),
-  execute: async (interaction: ChatInputCommandInteraction) => {
-    if (!interaction.guild || !interaction.channel) return;
+    name: "meetup",
+    help: "Create or edit a meetup",
+    description: "asdf",
+    builder: () =>
+        new SlashCommandBuilder()
+            .setName("meetup")
+            .setDescription("Create a meetup")
+            .addStringOption((option) => {
+                option
+                    .setName("action")
+                    .setDescription(
+                        "Create a new meetup, or edit an existing meetup"
+                    );
+                option.addChoices(
+                    ...eventActions.map((eventAction) => {
+                        return { name: eventAction, value: eventAction };
+                    })
+                );
+                option.setRequired(true);
+                return option;
+            }),
+    execute: async (interaction: ChatInputCommandInteraction) => {
+        if (!interaction.guild || !interaction.channel) return;
 
-    const eventAction: GuildEventAction = interaction.options.getString(
-      "action"
-    ) as GuildEventAction;
+        const eventAction: GuildEventAction = interaction.options.getString(
+            "action"
+        ) as GuildEventAction;
 
-    const defaultStartTime = new Date();
-    defaultStartTime.setDate(defaultStartTime.getDate() + 1);
-    const defaultDuration = 1;
+        const defaultStartTime = new Date();
+        defaultStartTime.setDate(defaultStartTime.getDate() + 1);
+        const defaultDuration = 1;
 
-    var newEvent: EventUnderConstruction =
-      interaction.user.id in eventsInProgress
-        ? eventsInProgress[interaction.user.id]
-        : {
-            name: "New Event",
-            description: "Your event description",
-            image: "",
-            scheduledStartTime: defaultStartTime,
-            duration: defaultDuration,
-            entityMetadata: { location: "Event Location" },
-            privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
-          };
+        var newEvent: EventUnderConstruction =
+            interaction.user.id in eventsInProgress
+                ? eventsInProgress[interaction.user.id]
+                : {
+                      name: "New Meetup",
+                      description: "Your meetup description",
+                      image: "",
+                      scheduledStartTime: defaultStartTime,
+                      duration: defaultDuration,
+                      entityMetadata: { location: "Meetup Location" },
+                      privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
+                      embedId: randomUUID(),
+                  };
 
-    eventsInProgress[interaction.user.id] = newEvent;
+        eventsInProgress[interaction.user.id] = newEvent;
 
-    await showEventModal(newEvent, interaction);
-  },
+        await showEventModal(newEvent, interaction);
+    },
 });
 
 async function showEventModal(
-  event: EventUnderConstruction,
-  interactionToReply: ChatInputCommandInteraction | ButtonInteraction
+    event: EventUnderConstruction,
+    interactionToReply: ChatInputCommandInteraction | ButtonInteraction
 ) {
-  const modalId = "createServerEventModal";
-  const modal = new ModalBuilder();
-  modal.setTitle("Create a New Event");
-  modal.setCustomId(modalId);
+    const modal = new ModalBuilder();
+    modal.setTitle("Create a New Meetup");
+    modal.setCustomId(event.embedId);
 
-  const nameInput =
-    new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
-      new TextInputBuilder()
-        .setLabel("Name")
-        .setCustomId(`${modalId}NameInput`)
-        .setStyle(TextInputStyle.Short)
-        .setValue(event.name)
-    );
+    const nameInput =
+        new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+            new TextInputBuilder()
+                .setLabel("Name")
+                .setCustomId(`${event.embedId}_name`)
+                .setStyle(TextInputStyle.Short)
+                .setValue(event.name)
+        );
 
-  const descriptionInput =
-    new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
-      new TextInputBuilder()
-        .setLabel("Description")
-        .setCustomId(`${modalId}DescriptionInput`)
-        .setStyle(TextInputStyle.Paragraph)
-        .setValue(event.description)
-    );
+    const locationInput =
+        new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+            new TextInputBuilder()
+                .setLabel("Location")
+                .setCustomId(`${event.embedId}_entityMetadata.location`)
+                .setStyle(TextInputStyle.Short)
+                .setValue(event.entityMetadata.location)
+        );
 
-  const dateInput =
-    new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
-      new TextInputBuilder()
-        .setLabel("Date and Time (format: DD/MM/YY HH:MM AM/PM)")
-        .setCustomId(`${modalId}StartTime`)
-        .setStyle(TextInputStyle.Short)
-        .setValue(
-          event.scheduledStartTime
-            .toLocaleString("en-us", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-            .replace(",", "")
-            .replace(" ", " ")
-        )
-    );
+    const descriptionInput =
+        new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+            new TextInputBuilder()
+                .setLabel("Description")
+                .setCustomId(`${event.embedId}_description`)
+                .setStyle(TextInputStyle.Paragraph)
+                .setValue(event.description)
+        );
 
-  const durationInput =
-    new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
-      new TextInputBuilder()
-        .setLabel("Duration (in hours)")
-        .setCustomId(`${modalId}Duration`)
-        .setStyle(TextInputStyle.Short)
-        .setValue(`${event.duration.toString()}`)
-    );
+    const dateInput =
+        new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+            new TextInputBuilder()
+                .setLabel("Date and Time (format: DD/MM/YY HH:MM AM/PM)")
+                .setCustomId(`${event.embedId}_scheduledStartTime`)
+                .setStyle(TextInputStyle.Short)
+                .setValue(
+                    event.scheduledStartTime
+                        .toLocaleString("en-us", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                        })
+                        .replace(",", "")
+                        .replace(" ", " ")
+                )
+        );
 
-  const components = [nameInput, descriptionInput, dateInput, durationInput];
-  modal.addComponents(components);
+    const durationInput =
+        new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+            new TextInputBuilder()
+                .setLabel("Duration (in hours)")
+                .setCustomId(`${event.embedId}_duration`)
+                .setStyle(TextInputStyle.Short)
+                .setValue(`${event.duration.toString()}`)
+        );
 
-  await interactionToReply.showModal(modal);
-  const submission = await interactionToReply.awaitModalSubmit({
-    time: minutesToMilliseconds(10),
-    filter: (submitInteraction, collected) => {
-      if (
-        submitInteraction.user.id === interactionToReply.user.id &&
-        submitInteraction.customId === modalId
-      ) {
-        return true;
-      }
+    const components = [
+        nameInput,
+        locationInput,
+        descriptionInput,
+        dateInput,
+        durationInput,
+    ];
+    modal.addComponents(components);
 
-      return false;
-    },
-  });
+    await interactionToReply.showModal(modal);
+    const modalSubmission = await interactionToReply.awaitModalSubmit({
+        time: minutesToMilliseconds(editingTimeoutInMinutes),
+        filter: (submitInteraction, collected) => {
+            if (
+                submitInteraction.user.id === interactionToReply.user.id &&
+                submitInteraction.customId === event.embedId
+            ) {
+                return true;
+            }
 
-  event.name = submission.fields.getTextInputValue(`${modalId}NameInput`);
-  event.description = submission.fields.getTextInputValue(
-    `${modalId}DescriptionInput`
-  );
-
-  const startTime = submission.fields.getTextInputValue(`${modalId}StartTime`);
-  if (!/\d\d?\/\d\d?\/\d{2,4}\s+\d\d?:\d\d\s+(am|pm)/i.test(startTime)) {
-    await submission.reply({
-      content: "Invalid date format.",
-      ephemeral: true,
+            return false;
+        },
     });
 
-    eventsInProgress[submission.user.id] = event;
-    return;
-  }
+    event.name = modalSubmission.fields.getTextInputValue(
+        `${event.embedId}_name`
+    );
+    event.entityMetadata.location = modalSubmission.fields.getTextInputValue(
+        `${event.embedId}_entityMetadata.location`
+    );
+    event.description = modalSubmission.fields.getTextInputValue(
+        `${event.embedId}_description`
+    );
 
-  event.scheduledStartTime = new Date(Date.parse(startTime));
+    const startTime = modalSubmission.fields.getTextInputValue(
+        `${event.embedId}_scheduledStartTime`
+    );
+    if (!/\d\d?\/\d\d?\/\d{2,4}\s+\d\d?:\d\d\s+(am|pm)/i.test(startTime)) {
+        await modalSubmission.reply({
+            content: "Invalid date format.",
+            ephemeral: true,
+        });
 
-  const duration = Number(
-    submission.fields.getTextInputValue(`${modalId}Duration`)
-  );
-  if (isNaN(duration)) {
-    await submission.reply({
-      content: "Invalid duration format.",
-      ephemeral: true,
-    });
+        eventsInProgress[modalSubmission.user.id] = event;
+        return;
+    }
 
-    eventsInProgress[submission.user.id] = event;
-    return;
-  }
+    event.scheduledStartTime = new Date(Date.parse(startTime));
 
-  event.duration = duration;
+    const duration = Number(
+        modalSubmission.fields.getTextInputValue(`${event.embedId}_duration`)
+    );
+    if (isNaN(duration)) {
+        await modalSubmission.reply({
+            content: "Invalid duration format.",
+            ephemeral: true,
+        });
 
-  var submissionEmbed = createSubmissionEmbed();
-  const submissionReply = await submission.reply(submissionEmbed);
+        eventsInProgress[modalSubmission.user.id] = event;
+        return;
+    }
 
-  waitForSubmission(submission, embedId, event, interactionToReply);
-}
+    event.duration = duration;
 
-function waitForSubmission(
-  submission: ModalSubmitInteraction,
-  embedId: string,
-  event: EventUnderConstruction,
-  commandInteraction: ChatInputCommandInteraction | ButtonInteraction
-) {
-  if (!submission.channel) return;
-
-  const submissionCollector =
-    submission.channel.createMessageComponentCollector({
-      filter: (submissionInteraction) =>
-        submissionInteraction.user.id === submission.user.id &&
-        submissionInteraction.customId.startsWith(embedId),
-      time: minutesToMilliseconds(5),
-    });
-
-  submissionCollector.on(
-    "collect",
-    async (submissionInteraction: ButtonInteraction) =>
-      await submissionReceived(
-        submissionInteraction,
-        embedId,
+    let submissionEmbed = createSubmissionEmbed(event, "");
+    await modalSubmission.reply(submissionEmbed);
+    event.submissionCollector?.stop();
+    event.submissionCollector = undefined;
+    event.submissionCollector = getEmbedSubmissionCollector(
         event,
-        submissionCollector,
-        submission,
-        commandInteraction
-      )
-  );
-
-  submissionCollector.on("end", (collected, reason) => {
-    if (reason === "time") {
-      submission.editReply({
-        content:
-          "Sorry, your event editing timed out! You can continue from where you left off when ready.",
-        embeds: [],
-        components: [],
-      });
-    }
-  });
+        modalSubmission
+    );
 }
 
-async function submissionReceived(
-  submissionInteraction: ButtonInteraction,
-  embedId: string,
-  event: EventUnderConstruction,
-  submissionCollector: any,
-  modalSubmission: ModalSubmitInteraction,
-  commandInteraction: ChatInputCommandInteraction | ButtonInteraction
-) {
-  if (submissionInteraction.customId === `${embedId}Edit`) {
-    await modalSubmission.deleteReply();
-    submissionCollector.stop();
-    await showEventModal(event, submissionInteraction);
-  } else if (submissionInteraction.customId === `${embedId}Save`) {
-    await submissionInteraction.update({
-      content: "Saved for later!",
-      embeds: [],
-      components: [],
-    });
-    eventsInProgress[submissionInteraction.user.id] = event;
+function getEmbedSubmissionCollector(
+    event: EventUnderConstruction,
+    modalSubmission: ModalSubmitInteraction
+): InteractionCollector<ButtonInteraction> {
+    if (!modalSubmission.channel)
+        throw new Error("This command needs to be triggered in a channel.");
 
-    submissionCollector.stop();
-  } else if (submissionInteraction.customId === `${embedId}AddImage`) {
-    await modalSubmission.editReply({
-      content: "Adding image...",
-      embeds: [],
-      components: [],
+    if (event.submissionCollector) return event.submissionCollector;
+
+    const submissionCollector =
+        modalSubmission.channel.createMessageComponentCollector({
+            filter: (submissionInteraction) =>
+                submissionInteraction.user.id === modalSubmission.user.id &&
+                submissionInteraction.customId.startsWith(event.embedId),
+            time: minutesToMilliseconds(editingTimeoutInMinutes),
+        }) as InteractionCollector<ButtonInteraction>;
+
+    submissionCollector.on(
+        "collect",
+        async (submissionInteraction: ButtonInteraction) => {
+            const handlerName = submissionInteraction.customId.replace(
+                `${event.embedId}_button_`,
+                ""
+            );
+            const handler = buttonHandlerMap[handlerName];
+            await handler(event, submissionInteraction, modalSubmission);
+        }
+    );
+
+    submissionCollector.on("end", (collected, reason) => {
+        if (reason === "time") {
+            modalSubmission.editReply({
+                content:
+                    "Sorry, your event editing timed out! You can continue from where you left off when ready.",
+                embeds: [],
+                components: [],
+            });
+        }
     });
 
-    const imageResponse = await submissionInteraction.reply({
-      content: `Hi ${submissionInteraction.user.username}, just reply to this message with your image!`,
-      fetchReply: true,
-    });
-
-    let replies = await imageResponse.channel.awaitMessages({
-      filter: (replyInteraction) =>
-        replyInteraction.reference?.messageId === imageResponse.id,
-      time: minutesToMilliseconds(1),
-      max: 1,
-    });
-
-    if (!replies.at(0)) {
-      imageResponse.edit("Sorry, you took too long! Please try again.");
-      setTimeout(() => imageResponse.delete(), minutesToMilliseconds(1));
-      const submissionEmbed = createSubmissionEmbed();
-      await modalSubmission.editReply(submissionEmbed);
-      return;
-    }
-
-    if (replies.at(0)?.attachments.at(0)?.url) {
-      event.image = replies.at(0)?.attachments.at(0)?.url as string;
-      await replies.at(0)?.delete();
-      await imageResponse.delete();
-      const submissionEmbed = createSubmissionEmbed();
-      submissionEmbed.content = "Image added!";
-      await modalSubmission.editReply(submissionEmbed);
-    }
-  } else if (submissionInteraction.customId === `${embedId}Finish`) {
-    const scheduledEndTime = new Date(event.scheduledStartTime);
-    scheduledEndTime.setHours(scheduledEndTime.getHours() + event.duration);
-    submissionInteraction.guild?.scheduledEvents.create({
-      ...event,
-      scheduledEndTime,
-      entityType: GuildScheduledEventEntityType.External,
-    });
-    await submissionInteraction.update({
-      content: "Event created successfully!",
-      embeds: [],
-      components: [],
-    });
-    delete eventsInProgress[submissionInteraction.user.id];
-
-    submissionCollector.stop();
-  }
+    return submissionCollector;
 }
 
-function createSubmissionEmbed(): InteractionReplyOptions {
-  const submissionEmbed = new EmbedBuilder().setTitle("Creating an event...");
-  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents([
-    new ButtonBuilder()
-      .setLabel("Edit")
-      .setCustomId(`${embedId}Edit`)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setLabel("Add An Image")
-      .setCustomId(`${embedId}AddImage`)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setLabel("Save For Later")
-      .setCustomId(`${embedId}Save`)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setLabel("Finish")
-      .setCustomId(`${embedId}Finish`)
-      .setStyle(ButtonStyle.Primary),
-  ]);
+const buttonHandlerMap: {
+    [handlerName: string]: (
+        event: EventUnderConstruction,
+        submissionInteraction: ButtonInteraction,
+        modalSubmission: ModalSubmitInteraction
+    ) => void;
+} = {
+    edit: async (
+        event: EventUnderConstruction,
+        submissionInteraction: ButtonInteraction,
+        modalSubmission: ModalSubmitInteraction
+    ) => {
+        await modalSubmission.deleteReply();
+        await showEventModal(event, submissionInteraction);
+    },
+    addImage: async (
+        event: EventUnderConstruction,
+        submissionInteraction: ButtonInteraction,
+        modalSubmission: ModalSubmitInteraction
+    ) => {
+        await modalSubmission.editReply({
+            content: "Adding image...",
+            embeds: [],
+            components: [],
+        });
 
-  return {
-    embeds: [submissionEmbed],
-    components: [buttonRow],
-    ephemeral: true,
-    fetchReply: true,
-  };
+        const imageResponse = await submissionInteraction.reply({
+            content: `Hi ${submissionInteraction.user.toString()}, just reply to this message with your image!`,
+            fetchReply: true,
+        });
+
+        let replies = await imageResponse.channel.awaitMessages({
+            filter: (replyInteraction) =>
+                replyInteraction.reference?.messageId === imageResponse.id,
+            time: minutesToMilliseconds(10),
+            max: 1,
+        });
+
+        if (!replies.at(0)) {
+            imageResponse.edit("Sorry, you took too long! Please try again.");
+            setTimeout(() => imageResponse.delete(), minutesToMilliseconds(1));
+            const submissionEmbed = createSubmissionEmbed(event, "");
+            await modalSubmission.editReply(submissionEmbed);
+            return;
+        }
+
+        if (replies.at(0)?.attachments.at(0)?.url) {
+            event.image = replies.at(0)?.attachments.at(0)?.url as string;
+            await replies.at(0)?.delete();
+            await imageResponse.delete();
+            const submissionEmbed = createSubmissionEmbed(
+                event,
+                "Image added!"
+            );
+            await modalSubmission.editReply(submissionEmbed);
+        }
+    },
+    save: async (
+        event: EventUnderConstruction,
+        submissionInteraction: ButtonInteraction,
+        modalSubmission: ModalSubmitInteraction
+    ) => {
+        await submissionInteraction.update({
+            content: `Saved for later! You can continue from where you left off with "/meetup create". Don't wait too long, or you will have to start over again!`,
+            embeds: [],
+            components: [],
+        });
+        eventsInProgress[submissionInteraction.user.id] = event;
+        getEmbedSubmissionCollector(event, modalSubmission)?.stop();
+    },
+    finish: async (
+        event: EventUnderConstruction,
+        submissionInteraction: ButtonInteraction,
+        modalSubmission: ModalSubmitInteraction
+    ) => {
+        if (!submissionInteraction.deferred)
+            submissionInteraction.deferUpdate();
+
+        await modalSubmission.editReply({
+            content: "Creating event...",
+            embeds: [],
+            components: [],
+        });
+        const scheduledEndTime = new Date(event.scheduledStartTime);
+        scheduledEndTime.setHours(scheduledEndTime.getHours() + event.duration);
+        await submissionInteraction.guild?.scheduledEvents.create({
+            ...event,
+            scheduledEndTime,
+            entityType: GuildScheduledEventEntityType.External,
+        });
+        await modalSubmission.editReply({
+            content: "Event created successfully!",
+            embeds: [],
+            components: [],
+        });
+        delete eventsInProgress[submissionInteraction.user.id];
+        getEmbedSubmissionCollector(event, modalSubmission)?.stop();
+    },
+    cancel: async (
+        event: EventUnderConstruction,
+        submissionInteraction: ButtonInteraction,
+        modalSubmission: ModalSubmitInteraction
+    ) => {
+        await modalSubmission.editReply({
+            content: "Cancelled event.",
+            embeds: [],
+            components: [],
+        });
+        delete eventsInProgress[submissionInteraction.user.id];
+        getEmbedSubmissionCollector(event, modalSubmission)?.stop();
+    },
+};
+
+function createSubmissionEmbed(
+    event: EventUnderConstruction,
+    content: string
+): {
+    embeds: EmbedBuilder[];
+    components: ActionRowBuilder<ButtonBuilder>[];
+    ephemeral: boolean;
+    fetchReply: boolean;
+    content: string;
+} {
+    const submissionEmbed = new EmbedBuilder().setTitle("Creating an event...");
+    const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents([
+        new ButtonBuilder()
+            .setLabel("Edit")
+            .setCustomId(`${event.embedId}_button_edit`)
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setLabel(event.image === "" ? "Add An Image" : "Change Image")
+            .setCustomId(`${event.embedId}_button_addImage`)
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setLabel("Save For Later")
+            .setCustomId(`${event.embedId}_button_save`)
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setLabel("Finish")
+            .setCustomId(`${event.embedId}_button_finish`)
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setLabel("Cancel")
+            .setCustomId(`${event.embedId}_button_cancel`)
+            .setStyle(ButtonStyle.Danger),
+    ]);
+
+    return {
+        embeds: [submissionEmbed, createPreviewEmbed(event)],
+        components: [buttonRow],
+        ephemeral: true,
+        fetchReply: true,
+        content,
+    };
+}
+
+function createPreviewEmbed(event: EventUnderConstruction): EmbedBuilder {
+    const previewEmbed = new EmbedBuilder().setTitle(
+        `${event.scheduledStartTime
+            .toLocaleString()
+            .replace(/(?<=\d\d:\d\d):\d\d/, "")} - ${event.name}`
+    );
+    if (event.image !== "") {
+        previewEmbed.setThumbnail(event.image);
+    }
+    previewEmbed.setDescription(event.description);
+    previewEmbed.addFields([
+        {
+            name: "Location",
+            value: event.entityMetadata.location,
+            inline: true,
+        },
+        { name: "Duration", value: `${event.duration} hours`, inline: true },
+    ]);
+    return previewEmbed;
 }
