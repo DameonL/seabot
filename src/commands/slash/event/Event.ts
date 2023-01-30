@@ -443,7 +443,7 @@ function createPreviewEmbed(event: EventUnderConstruction): EmbedBuilder {
     const previewEmbed = new EmbedBuilder().setTitle(
         `${event.scheduledStartTime
             .toLocaleString()
-            .replace(/(?<=\d\d:\d\d):\d\d/, "")} - ${event.name}`
+            .replace(/(?<=\d?\d:\d\d):\d\d/, "")} - ${event.name}`
     );
     if (event.image !== "") {
         previewEmbed.setThumbnail(event.image);
