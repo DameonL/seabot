@@ -13,6 +13,7 @@ import { randomUUID } from "crypto";
 import {
   ButtonInteraction,
   ButtonStyle,
+  Channel,
   ChannelType,
   ChatInputCommandInteraction,
   Embed,
@@ -25,9 +26,11 @@ import {
   ModalSubmitInteraction,
   TextChannel,
   TextInputStyle,
+  ThreadChannel,
   User,
 } from "discord.js";
 import { minutesToMilliseconds } from "../../../utils/Time/conversion";
+import { discordBot } from "../../../server";
 
 interface EventUnderConstruction {
   author: User;
@@ -56,6 +59,22 @@ const eventTypes = [
   { name: "Meetup", channelId: "1069270901251657849" },
   { name: "Hangout", channelId: "1069679271309758614" },
 ];
+
+const waitForClient = () => {
+  if (discordBot && discordBot.client) {
+    const channelToWatch = discordBot.client.channels.cache.get(
+      eventTypes[0].channelId
+    ) as ForumChannel;
+    if (channelToWatch) {
+      listenForButtons(channelToWatch);
+      return;
+    }
+  }
+
+  setTimeout(waitForClient, 500);
+};
+
+waitForClient();
 
 export default new SlashCommand({
   name: "event",
@@ -113,7 +132,7 @@ export default new SlashCommand({
             privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
             id: randomUUID(),
             channelId,
-            author: interaction.user
+            author: interaction.user,
           };
 
     eventsInProgress[interaction.user.id] = newEvent;
@@ -210,9 +229,7 @@ async function showEventModal(
     },
   });
 
-  event.name = modalSubmission.fields.getTextInputValue(
-    `${event.id}_name`
-  );
+  event.name = modalSubmission.fields.getTextInputValue(`${event.id}_name`);
   event.entityMetadata.location = modalSubmission.fields.getTextInputValue(
     `${event.id}_entityMetadata.location`
   );
@@ -260,6 +277,32 @@ async function showEventModal(
   );
 }
 
+async function listenForButtons(channel: ForumChannel) {
+  for (const thread of channel.threads.cache.values()) {
+    listenToThread(thread);
+  }
+}
+
+async function listenToThread(thread: ThreadChannel) {
+  const collector = thread.createMessageComponentCollector({
+    filter: (submissionInteraction) =>
+      (discordBot.client.user &&
+        submissionInteraction.customId.startsWith(
+          discordBot.client.user.id
+        )) == true,
+  }) as InteractionCollector<ButtonInteraction>;
+
+  collector.on("collect", (interaction: ButtonInteraction) => {
+    const buttonId = interaction.customId.match(/(?<=_button_).*$/i)?.[0];
+    if (!buttonId) throw new Error("Unable to get button ID from customId");
+
+    const handler = buttonHandlers[buttonId];
+    if (!handler) throw new Error(`No handler for button ID ${buttonId}`);
+
+    handler(interaction);
+  });
+}
+
 function getEmbedSubmissionCollector(
   event: EventUnderConstruction,
   modalSubmission: ModalSubmitInteraction
@@ -301,6 +344,52 @@ function getEmbedSubmissionCollector(
   });
 
   return submissionCollector;
+}
+
+const buttonHandlers: {
+  [handlerName: string]: (interaction: ButtonInteraction) => void | Promise<void>
+} = {
+  attending: (interaction: ButtonInteraction) => {
+    const attendingEmbed = interaction.message.embeds[1];
+    const attendingField = attendingEmbed.fields.find(x => x.name === "Attending");
+    if (!attendingField) throw new Error("Unable to find attending field.");
+
+    const userString = `${interaction.user.username} (${interaction.user.id})`;
+
+    let attendees = attendingField.value;
+    if (attendees.includes(userString)) {
+      interaction.reply({content: "It looks like you're already attending!", ephemeral: true});
+      return;
+    }
+
+    attendees = `${attendees}\n${userString}`;
+    attendingField.value = attendees;
+    interaction.reply({content: "Congratulations, you're going!", ephemeral: true});
+    interaction.message.edit({ embeds: [interaction.message.embeds[0], attendingEmbed]});
+  },
+  notAttending: (interaction: ButtonInteraction) => {
+    const attendingEmbed = interaction.message.embeds[1];
+    const attendingField = attendingEmbed.fields.find(x => x.name === "Attending");
+    if (!attendingField) throw new Error("Unable to find attending field.");
+
+    const userString = `${interaction.user.username} (${interaction.user.id})`;
+
+    let attendees = attendingField.value;
+    if (!attendees.includes(userString)) {
+      interaction.reply({content: "Sorry, I don't see that you're attending!", ephemeral: true});
+      return;
+    }
+
+    const attendeeArray = attendees.split("\n");
+    attendeeArray.splice(attendeeArray.indexOf(userString), 1);
+
+    attendees = attendeeArray.join("\n");
+    attendingField.value = attendees;
+
+    interaction.reply({content: "Sorry you can't make it!", ephemeral: true});
+    interaction.message.edit({ embeds: [interaction.message.embeds[0], attendingEmbed]});
+  }
+
 }
 
 const buttonHandlerMap: {
@@ -445,11 +534,33 @@ async function createForumChannelEvent(
       .replace(/(?<=\d?\d:\d\d):\d\d/, " ")} - ${event.name}`,
     message: {
       embeds: [createPreviewEmbed(event), createAttendeesEmbed(event)],
+      components: [createAttendanceButtons(event)],
     },
   });
 
   threadChannel.messages.cache.at(0)?.pin();
-  threadChannel.messages.cache.at(0)?.react("✅");
+  listenToThread(threadChannel);
+}
+
+function createAttendanceButtons(
+  event: EventUnderConstruction
+): ActionRowBuilder<ButtonBuilder> {
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>();
+  buttonRow.addComponents([
+    new ButtonBuilder()
+      .setLabel("Attending")
+      .setStyle(ButtonStyle.Success)
+      .setCustomId(
+        `${discordBot.client.user?.id}_${event.id}_button_attending`
+      ),
+    new ButtonBuilder()
+      .setLabel("Not Attending")
+      .setStyle(ButtonStyle.Danger)
+      .setCustomId(
+        `${discordBot.client.user?.id}_${event.id}_button_notAttending`
+      ),
+  ]);
+  return buttonRow;
 }
 
 function createSubmissionEmbed(
@@ -511,34 +622,23 @@ function createPreviewEmbed(event: EventUnderConstruction): EmbedBuilder {
       value: event.entityMetadata.location,
       inline: true,
     },
-    { name: "Duration", value: `${event.duration} hours`, inline: true }
+    { name: "Duration", value: `${event.duration} hours`, inline: true },
   ]);
-  previewEmbed.setAuthor({name: `${event.author.username} (${event.author.id})`, iconURL: event.author.avatarURL() ?? ""})
-  previewEmbed.setFooter({ text: event.id })
+  previewEmbed.setAuthor({
+    name: `${event.author.username} (${event.author.id})`,
+    iconURL: event.author.avatarURL() ?? "",
+  });
+//  previewEmbed.setFooter({ text: event.id });
   return previewEmbed;
 }
 
 function createAttendeesEmbed(event: EventUnderConstruction): EmbedBuilder {
   const attendeesEmbed = new EmbedBuilder();
-  attendeesEmbed.addFields([{name: "Attending", value: `${event.author.username} (${event.author.id})`}]);
+  attendeesEmbed.addFields([
+    {
+      name: "Attending",
+      value: `${event.author.username} (${event.author.id})`,
+    },
+  ]);
   return attendeesEmbed;
-}
-
-function createAuthorMessage(event: EventUnderConstruction) {
-  const embed = new EmbedBuilder().setTitle("Author tools");
-  const buttonRow = new ActionRowBuilder<ButtonBuilder>();
-  buttonRow.addComponents([new ButtonBuilder().setCustomId(`${event.id}_button_editCreated`).setLabel("Edit")]);
-  const message = {
-    embeds: [embed],
-    components: [buttonRow],
-    ephemeral: true,
-    fetchReply: true,
-  }
-  return message;
-}
-
-function serializeAttendees(eventMessage: Message): string[] {
-  const attendees: string[] = [];
-  eventMessage.reactions.cache.filter(x => x.emoji.name === "✅")
-  return attendees;
 }
