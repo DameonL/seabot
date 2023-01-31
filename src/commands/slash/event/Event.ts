@@ -13,24 +13,21 @@ import { randomUUID } from "crypto";
 import {
   ButtonInteraction,
   ButtonStyle,
-  Channel,
   ChannelType,
   ChatInputCommandInteraction,
-  Embed,
   ForumChannel,
   GuildScheduledEventEntityType,
   GuildScheduledEventPrivacyLevel,
+  GuildVoiceChannelResolvable,
   InteractionCollector,
-  Message,
   ModalBuilder,
   ModalSubmitInteraction,
-  TextChannel,
   TextInputStyle,
   ThreadChannel,
   User,
 } from "discord.js";
-import { minutesToMilliseconds } from "../../../utils/Time/conversion";
 import { discordBot } from "../../../server";
+import { minutesToMilliseconds } from "../../../utils/Time/conversion";
 
 interface EventUnderConstruction {
   author: User;
@@ -38,12 +35,14 @@ interface EventUnderConstruction {
   description: string;
   image: string;
   entityMetadata: { location: string };
+  channel?: GuildVoiceChannelResolvable;
   scheduledStartTime: Date;
   duration: number;
   privacyLevel: GuildScheduledEventPrivacyLevel;
   id: string;
   submissionCollector?: InteractionCollector<ButtonInteraction>;
-  channelId: string;
+  forumChannelId: string;
+  entityType: GuildScheduledEventEntityType;
 }
 
 interface UserEventMap {
@@ -56,14 +55,14 @@ const editingTimeoutInMinutes = 30; // No real reason to be too restrictive on t
 type GuildEventAction = "create" | "edit";
 const eventActions: GuildEventAction[] = ["create", "edit"];
 const eventTypes = [
-  { name: "Meetup", channelId: "1069270901251657849" },
-  { name: "Hangout", channelId: "1069679271309758614" },
+  { name: "Meetup", forumChannelId: "1069270901251657849" },
+  { name: "Hangout", forumChannelId: "1069679271309758614" },
 ];
 
 const waitForClient = () => {
   if (discordBot && discordBot.client) {
     const channelToWatch = discordBot.client.channels.cache.get(
-      eventTypes[0].channelId
+      eventTypes[0].forumChannelId
     ) as ForumChannel;
     if (channelToWatch) {
       listenForButtons(channelToWatch);
@@ -88,8 +87,29 @@ export default new SlashCommand({
         option.setName("type").setDescription("The type of event to schedule");
         option.addChoices(
           ...eventTypes.map((eventType) => {
-            return { name: eventType.name, value: eventType.channelId };
+            return { name: eventType.name, value: eventType.forumChannelId };
           })
+        );
+        option.setRequired(true);
+        return option;
+      })
+      .addStringOption((option) => {
+        option
+          .setName("location")
+          .setDescription("The type of location the event will be");
+        option.addChoices(
+          {
+            name: "External",
+            value: GuildScheduledEventEntityType.External.toString(),
+          },
+          {
+            name: "Voice",
+            value: GuildScheduledEventEntityType.Voice.toString(),
+          },
+          {
+            name: "Stage",
+            value: GuildScheduledEventEntityType.StageInstance.toString(),
+          }
         );
         option.setRequired(true);
         return option;
@@ -113,8 +133,10 @@ export default new SlashCommand({
       "action"
     ) as GuildEventAction;
 
-    const channelId = interaction.options.getString("type") ?? "";
-
+    const forumChannelId = interaction.options.getString("type") ?? "";
+    const entityType = Number(
+      interaction.options.getString("location")
+    ) as GuildScheduledEventEntityType;
     const defaultStartTime = new Date();
     defaultStartTime.setDate(defaultStartTime.getDate() + 1);
     const defaultDuration = 1;
@@ -131,10 +153,12 @@ export default new SlashCommand({
             entityMetadata: { location: "Meetup Location" },
             privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
             id: randomUUID(),
-            channelId,
+            forumChannelId,
             author: interaction.user,
+            entityType,
           };
 
+    newEvent.entityType = entityType;
     eventsInProgress[interaction.user.id] = newEvent;
 
     await showEventModal(newEvent, interaction);
@@ -161,7 +185,11 @@ async function showEventModal(
   const locationInput =
     new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
       new TextInputBuilder()
-        .setLabel("Location")
+        .setLabel(
+          event.entityType === GuildScheduledEventEntityType.External
+            ? "Location"
+            : "Channel"
+        )
         .setCustomId(`${event.id}_entityMetadata.location`)
         .setStyle(TextInputStyle.Short)
         .setValue(event.entityMetadata.location)
@@ -230,9 +258,40 @@ async function showEventModal(
   });
 
   event.name = modalSubmission.fields.getTextInputValue(`${event.id}_name`);
-  event.entityMetadata.location = modalSubmission.fields.getTextInputValue(
-    `${event.id}_entityMetadata.location`
-  );
+  event.entityMetadata.location = modalSubmission.fields
+    .getTextInputValue(`${event.id}_entityMetadata.location`)
+    .trim();
+
+  if (event.entityType !== GuildScheduledEventEntityType.External) {
+    let matchingChannel = modalSubmission.guild?.channels.cache.find(
+      (x) =>
+        x.name.toLowerCase() === event.entityMetadata.location.toLowerCase()
+    );
+    if (!matchingChannel) {
+      await modalSubmission.reply({
+        content: `Couldn't find a channel named "${event.entityMetadata.location}".`,
+        ephemeral: true,
+      });
+
+      eventsInProgress[modalSubmission.user.id] = event;
+      return;
+    }
+    if (
+      matchingChannel.type !== ChannelType.GuildVoice &&
+      matchingChannel.type !== ChannelType.GuildStageVoice
+    ) {
+      await modalSubmission.reply({
+        content: `The channel must be a Voice or Stage channel.`,
+        ephemeral: true,
+      });
+
+      eventsInProgress[modalSubmission.user.id] = event;
+      return;
+    }
+
+    event.channel = matchingChannel;
+  }
+
   event.description = modalSubmission.fields.getTextInputValue(
     `${event.id}_description`
   );
@@ -287,9 +346,8 @@ async function listenToThread(thread: ThreadChannel) {
   const collector = thread.createMessageComponentCollector({
     filter: (submissionInteraction) =>
       (discordBot.client.user &&
-        submissionInteraction.customId.startsWith(
-          discordBot.client.user.id
-        )) == true,
+        submissionInteraction.customId.startsWith(discordBot.client.user.id)) ==
+      true,
   }) as InteractionCollector<ButtonInteraction>;
 
   collector.on("collect", (interaction: ButtonInteraction) => {
@@ -347,36 +405,53 @@ function getEmbedSubmissionCollector(
 }
 
 const buttonHandlers: {
-  [handlerName: string]: (interaction: ButtonInteraction) => void | Promise<void>
+  [handlerName: string]: (
+    interaction: ButtonInteraction
+  ) => void | Promise<void>;
 } = {
   attending: (interaction: ButtonInteraction) => {
     const attendingEmbed = interaction.message.embeds[1];
-    const attendingField = attendingEmbed.fields.find(x => x.name === "Attending");
+    const attendingField = attendingEmbed.fields.find(
+      (x) => x.name === "Attending"
+    );
     if (!attendingField) throw new Error("Unable to find attending field.");
 
     const userString = `${interaction.user.username} (${interaction.user.id})`;
 
     let attendees = attendingField.value;
     if (attendees.includes(userString)) {
-      interaction.reply({content: "It looks like you're already attending!", ephemeral: true});
+      interaction.reply({
+        content: "It looks like you're already attending!",
+        ephemeral: true,
+      });
       return;
     }
 
     attendees = `${attendees}\n${userString}`;
     attendingField.value = attendees;
-    interaction.reply({content: "Congratulations, you're going!", ephemeral: true});
-    interaction.message.edit({ embeds: [interaction.message.embeds[0], attendingEmbed]});
+    interaction.reply({
+      content: "Congratulations, you're going!",
+      ephemeral: true,
+    });
+    interaction.message.edit({
+      embeds: [interaction.message.embeds[0], attendingEmbed],
+    });
   },
   notAttending: (interaction: ButtonInteraction) => {
     const attendingEmbed = interaction.message.embeds[1];
-    const attendingField = attendingEmbed.fields.find(x => x.name === "Attending");
+    const attendingField = attendingEmbed.fields.find(
+      (x) => x.name === "Attending"
+    );
     if (!attendingField) throw new Error("Unable to find attending field.");
 
     const userString = `${interaction.user.username} (${interaction.user.id})`;
 
     let attendees = attendingField.value;
     if (!attendees.includes(userString)) {
-      interaction.reply({content: "Sorry, I don't see that you're attending!", ephemeral: true});
+      interaction.reply({
+        content: "Sorry, I don't see that you're attending!",
+        ephemeral: true,
+      });
       return;
     }
 
@@ -386,11 +461,12 @@ const buttonHandlers: {
     attendees = attendeeArray.join("\n");
     attendingField.value = attendees;
 
-    interaction.reply({content: "Sorry you can't make it!", ephemeral: true});
-    interaction.message.edit({ embeds: [interaction.message.embeds[0], attendingEmbed]});
-  }
-
-}
+    interaction.reply({ content: "Sorry you can't make it!", ephemeral: true });
+    interaction.message.edit({
+      embeds: [interaction.message.embeds[0], attendingEmbed],
+    });
+  },
+};
 
 const buttonHandlerMap: {
   [handlerName: string]: (
@@ -471,8 +547,15 @@ const buttonHandlerMap: {
       embeds: [],
       components: [],
     });
-    //    await createGuildScheduledEvent(event, submissionInteraction);
-    await createForumChannelEvent(event, submissionInteraction);
+    const forumThread = await createForumChannelEvent(
+      event,
+      submissionInteraction
+    );
+    await createGuildScheduledEvent(
+      event,
+      submissionInteraction,
+      forumThread.url
+    );
 
     await modalSubmission.editReply({
       content: "Event created successfully!",
@@ -499,14 +582,15 @@ const buttonHandlerMap: {
 
 async function createGuildScheduledEvent(
   event: EventUnderConstruction,
-  submissionInteraction: ButtonInteraction
+  submissionInteraction: ButtonInteraction,
+  threadUrl: string
 ) {
   const scheduledEndTime = new Date(event.scheduledStartTime);
   scheduledEndTime.setHours(scheduledEndTime.getHours() + event.duration);
+  event.description = `${event.description}\n${threadUrl}`;
   await submissionInteraction.guild?.scheduledEvents.create({
     ...event,
     scheduledEndTime,
-    entityType: GuildScheduledEventEntityType.External,
   });
 }
 
@@ -517,16 +601,18 @@ async function createForumChannelEvent(
   const scheduledEndTime = new Date(event.scheduledStartTime);
   scheduledEndTime.setHours(scheduledEndTime.getHours() + event.duration);
   const targetChannel = submissionInteraction.guild?.channels.cache.get(
-    event.channelId
+    event.forumChannelId
   ) as ForumChannel;
 
   if (targetChannel.type !== ChannelType.GuildForum)
     throw new Error(
-      `Channel with ID ${event.channelId} is of type ${targetChannel.type}, but expected a forum channel!`
+      `Channel with ID ${event.forumChannelId} is of type ${targetChannel.type}, but expected a forum channel!`
     );
 
   if (!targetChannel)
-    throw new Error(`Unable to resolve ID ${event.channelId} to a channel.`);
+    throw new Error(
+      `Unable to resolve ID ${event.forumChannelId} to a channel.`
+    );
 
   const threadChannel = await targetChannel.threads.create({
     name: `${event.scheduledStartTime
@@ -540,6 +626,8 @@ async function createForumChannelEvent(
 
   threadChannel.messages.cache.at(0)?.pin();
   listenToThread(threadChannel);
+
+  return threadChannel;
 }
 
 function createAttendanceButtons(
@@ -628,7 +716,7 @@ function createPreviewEmbed(event: EventUnderConstruction): EmbedBuilder {
     name: `${event.author.username} (${event.author.id})`,
     iconURL: event.author.avatarURL() ?? "",
   });
-//  previewEmbed.setFooter({ text: event.id });
+  //  previewEmbed.setFooter({ text: event.id });
   return previewEmbed;
 }
 
