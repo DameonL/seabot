@@ -7,26 +7,29 @@ import {
   TextInputBuilder,
 } from "@discordjs/builders";
 
-import SlashCommand from "../SlashCommand";
-
 import { randomUUID } from "crypto";
 import {
   ButtonInteraction,
   ButtonStyle,
   ChannelType,
   ChatInputCommandInteraction,
+  Client,
+  Events,
   ForumChannel,
   GuildScheduledEventEntityType,
   GuildScheduledEventPrivacyLevel,
   GuildVoiceChannelResolvable,
+  Interaction,
   InteractionCollector,
+  InteractionType,
   ModalBuilder,
   ModalSubmitInteraction,
+  REST,
+  Routes,
   TextInputStyle,
   ThreadChannel,
   User,
 } from "discord.js";
-import { discordBot } from "../../../server";
 import { minutesToMilliseconds } from "../../../utils/Time/conversion";
 
 interface EventUnderConstruction {
@@ -37,6 +40,7 @@ interface EventUnderConstruction {
   entityMetadata: { location: string };
   channel?: GuildVoiceChannelResolvable;
   scheduledStartTime: Date;
+  scheduledEndTime?: Date;
   duration: number;
   privacyLevel: GuildScheduledEventPrivacyLevel;
   id: string;
@@ -54,32 +58,73 @@ const editingTimeoutInMinutes = 30; // No real reason to be too restrictive on t
 
 type GuildEventAction = "create" | "edit";
 const eventActions: GuildEventAction[] = ["create", "edit"];
-const eventTypes = [
-  { name: "Meetup", forumChannelId: "1069270901251657849" },
-  { name: "Hangout", forumChannelId: "1069679271309758614" },
-];
-
+/*
 const waitForClient = () => {
   if (discordBot && discordBot.client) {
-    const channelToWatch = discordBot.client.channels.cache.get(
-      eventTypes[0].forumChannelId
-    ) as ForumChannel;
-    if (channelToWatch) {
-      listenForButtons(channelToWatch);
-      return;
+    if (discordBot.client.user) {
+      registerEventCommand(discordBot.client.user.id, process.env.botToken as string);
+    }
+    for (const eventType of eventTypes) {
+      const channelToWatch = discordBot.client.channels.cache.get(
+        eventType.forumChannelId
+      ) as ForumChannel;
+      
+      if (channelToWatch) {
+        listenForButtons(channelToWatch);
+        return;
+      }
     }
   }
 
   setTimeout(waitForClient, 500);
 };
 
-waitForClient();
 
-export default new SlashCommand({
-  name: "event",
-  help: "Create or edit an event",
-  description: "Create or edit an event",
-  builder: () =>
+waitForClient();
+*/
+
+type EventTypeInformation = {
+  name: string;
+  channelId: string;
+};
+
+let discordClient: Client;
+
+export default async function registerEventCommand(
+  client: Client,
+  botToken: string,
+  eventTypes: { name: string; channelId: string }[]
+) {
+  discordClient = client;
+  const rest = new REST({ version: "10" }).setToken(botToken);
+
+  await rest.put(Routes.applicationCommands(client.user?.id ?? ""), {
+    body: [eventCommand.builder(eventTypes).toJSON()],
+  });
+
+  client.on(Events.InteractionCreate, (interaction: Interaction) => {
+    if (
+      (interaction.type === InteractionType.ApplicationCommand ||
+        interaction.type === InteractionType.ApplicationCommandAutocomplete) &&
+      interaction.commandName === "event"
+    )
+      eventCommand.execute(interaction as ChatInputCommandInteraction);
+  });
+
+  for (const eventType of eventTypes) {
+    const channel = client.channels.cache.get(eventType.channelId);
+    if (channel && channel.type === ChannelType.GuildForum) {
+      listenForButtons(channel);
+    } else {
+      throw new Error(
+        `Channel with ID ${eventType.channelId} does not exist or is not a forum channel.`
+      );
+    }
+  }
+}
+
+const eventCommand = {
+  builder: (eventTypes: EventTypeInformation[]) =>
     new SlashCommandBuilder()
       .setName("event")
       .setDescription("Create or edit an event")
@@ -87,7 +132,7 @@ export default new SlashCommand({
         option.setName("type").setDescription("The type of event to schedule");
         option.addChoices(
           ...eventTypes.map((eventType) => {
-            return { name: eventType.name, value: eventType.forumChannelId };
+            return { name: eventType.name, value: eventType.channelId };
           })
         );
         option.setRequired(true);
@@ -96,7 +141,7 @@ export default new SlashCommand({
       .addStringOption((option) => {
         option
           .setName("location")
-          .setDescription("The type of location the event will be");
+          .setDescription("The type of location the event will be at");
         option.addChoices(
           {
             name: "External",
@@ -150,7 +195,12 @@ export default new SlashCommand({
             image: "",
             scheduledStartTime: defaultStartTime,
             duration: defaultDuration,
-            entityMetadata: { location: "Meetup Location" },
+            entityMetadata: {
+              location:
+                entityType === GuildScheduledEventEntityType.External
+                  ? "Meetup Location"
+                  : "Channel Name",
+            },
             privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
             id: randomUUID(),
             forumChannelId,
@@ -163,7 +213,7 @@ export default new SlashCommand({
 
     await showEventModal(newEvent, interaction);
   },
-});
+};
 
 async function showEventModal(
   event: EventUnderConstruction,
@@ -290,6 +340,7 @@ async function showEventModal(
     }
 
     event.channel = matchingChannel;
+    event.entityMetadata.location = matchingChannel.url;
   }
 
   event.description = modalSubmission.fields.getTextInputValue(
@@ -345,8 +396,8 @@ async function listenForButtons(channel: ForumChannel) {
 async function listenToThread(thread: ThreadChannel) {
   const collector = thread.createMessageComponentCollector({
     filter: (submissionInteraction) =>
-      (discordBot.client.user &&
-        submissionInteraction.customId.startsWith(discordBot.client.user.id)) ==
+      (discordClient.user &&
+        submissionInteraction.customId.startsWith(discordClient.user.id)) ==
       true,
   }) as InteractionCollector<ButtonInteraction>;
 
@@ -374,7 +425,7 @@ function getEmbedSubmissionCollector(
     modalSubmission.channel.createMessageComponentCollector({
       filter: (submissionInteraction) =>
         submissionInteraction.user.id === modalSubmission.user.id &&
-        submissionInteraction.customId.startsWith(event.id),
+        submissionInteraction.customId.startsWith(discordClient.user?.id ?? ""),
       time: minutesToMilliseconds(editingTimeoutInMinutes),
     }) as InteractionCollector<ButtonInteraction>;
 
@@ -382,11 +433,13 @@ function getEmbedSubmissionCollector(
     "collect",
     async (submissionInteraction: ButtonInteraction) => {
       const handlerName = submissionInteraction.customId.replace(
-        `${event.id}_button_`,
+        `${discordClient.user?.id}_${event.id}_button_`,
         ""
       );
-      const handler = buttonHandlerMap[handlerName];
-      await handler(event, submissionInteraction, modalSubmission);
+      const handler = createEventButtonHandlers[handlerName];
+      if (handler) {
+        await handler(event, submissionInteraction, modalSubmission);
+      }
     }
   );
 
@@ -438,11 +491,21 @@ const buttonHandlers: {
     });
   },
   notAttending: (interaction: ButtonInteraction) => {
+    const eventEmbed = interaction.message.embeds[0];
     const attendingEmbed = interaction.message.embeds[1];
     const attendingField = attendingEmbed.fields.find(
       (x) => x.name === "Attending"
     );
     if (!attendingField) throw new Error("Unable to find attending field.");
+
+    const eventAuthorId = eventEmbed.author?.name.match(/(?<=\().*(?=\)$)/i)?.[0] as string;
+    if (eventAuthorId === interaction.user.id) {
+      interaction.reply({
+        content: `Hey, you can't leave your own event! If you want to cancel your event, use the "/event cancel" command.`,
+        ephemeral: true,
+      });
+      return;
+    }
 
     const userString = `${interaction.user.username} (${interaction.user.id})`;
 
@@ -468,7 +531,7 @@ const buttonHandlers: {
   },
 };
 
-const buttonHandlerMap: {
+const createEventButtonHandlers: {
   [handlerName: string]: (
     event: EventUnderConstruction,
     submissionInteraction: ButtonInteraction,
@@ -571,7 +634,7 @@ const buttonHandlerMap: {
     modalSubmission: ModalSubmitInteraction
   ) => {
     await modalSubmission.editReply({
-      content: "Cancelled event.",
+      content: "Cancelled event creation.",
       embeds: [],
       components: [],
     });
@@ -585,13 +648,14 @@ async function createGuildScheduledEvent(
   submissionInteraction: ButtonInteraction,
   threadUrl: string
 ) {
-  const scheduledEndTime = new Date(event.scheduledStartTime);
-  scheduledEndTime.setHours(scheduledEndTime.getHours() + event.duration);
-  event.description = `${event.description}\n${threadUrl}`;
-  await submissionInteraction.guild?.scheduledEvents.create({
-    ...event,
-    scheduledEndTime,
-  });
+  const eventToSubmit = { ...event };
+  const scheduledEndTime = new Date(eventToSubmit.scheduledStartTime);
+  scheduledEndTime.setHours(
+    scheduledEndTime.getHours() + eventToSubmit.duration
+  );
+  eventToSubmit.scheduledEndTime = scheduledEndTime;
+  eventToSubmit.description = `${eventToSubmit.description}\nDiscussion: ${threadUrl}`;
+  await submissionInteraction.guild?.scheduledEvents.create(eventToSubmit);
 }
 
 async function createForumChannelEvent(
@@ -638,15 +702,11 @@ function createAttendanceButtons(
     new ButtonBuilder()
       .setLabel("Attending")
       .setStyle(ButtonStyle.Success)
-      .setCustomId(
-        `${discordBot.client.user?.id}_${event.id}_button_attending`
-      ),
+      .setCustomId(`${discordClient.user?.id}_${event.id}_button_attending`),
     new ButtonBuilder()
       .setLabel("Not Attending")
       .setStyle(ButtonStyle.Danger)
-      .setCustomId(
-        `${discordBot.client.user?.id}_${event.id}_button_notAttending`
-      ),
+      .setCustomId(`${discordClient.user?.id}_${event.id}_button_notAttending`),
   ]);
   return buttonRow;
 }
@@ -665,23 +725,23 @@ function createSubmissionEmbed(
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents([
     new ButtonBuilder()
       .setLabel("Edit")
-      .setCustomId(`${event.id}_button_edit`)
+      .setCustomId(`${discordClient.user?.id}_${event.id}_button_edit`)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setLabel(event.image === "" ? "Add An Image" : "Change Image")
-      .setCustomId(`${event.id}_button_addImage`)
+      .setCustomId(`${discordClient.user?.id}_${event.id}_button_addImage`)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setLabel("Save For Later")
-      .setCustomId(`${event.id}_button_save`)
+      .setCustomId(`${discordClient.user?.id}_${event.id}_button_save`)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setLabel("Finish")
-      .setCustomId(`${event.id}_button_finish`)
+      .setCustomId(`${discordClient.user?.id}_${event.id}_button_finish`)
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setLabel("Cancel")
-      .setCustomId(`${event.id}_button_cancel`)
+      .setCustomId(`${discordClient.user?.id}_${event.id}_button_cancel`)
       .setStyle(ButtonStyle.Danger),
   ]);
 
@@ -716,7 +776,7 @@ function createPreviewEmbed(event: EventUnderConstruction): EmbedBuilder {
     name: `${event.author.username} (${event.author.id})`,
     iconURL: event.author.avatarURL() ?? "",
   });
-  //  previewEmbed.setFooter({ text: event.id });
+
   return previewEmbed;
 }
 
