@@ -58,30 +58,6 @@ const editingTimeoutInMinutes = 30; // No real reason to be too restrictive on t
 
 type GuildEventAction = "create" | "edit";
 const eventActions: GuildEventAction[] = ["create", "edit"];
-/*
-const waitForClient = () => {
-  if (discordBot && discordBot.client) {
-    if (discordBot.client.user) {
-      registerEventCommand(discordBot.client.user.id, process.env.botToken as string);
-    }
-    for (const eventType of eventTypes) {
-      const channelToWatch = discordBot.client.channels.cache.get(
-        eventType.forumChannelId
-      ) as ForumChannel;
-      
-      if (channelToWatch) {
-        listenForButtons(channelToWatch);
-        return;
-      }
-    }
-  }
-
-  setTimeout(waitForClient, 500);
-};
-
-
-waitForClient();
-*/
 
 type EventTypeInformation = {
   name: string;
