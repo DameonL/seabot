@@ -1,3 +1,4 @@
-import Event from "./Event";
+import EventAdapter from "./EventAdapter";
+import EditEventAdapter from "./EditEventAdapter";
 
-export default [Event];
+export default [EventAdapter, EditEventAdapter];
