@@ -15,6 +15,13 @@ let configuration:
     { name: "Happening", channelId: "1069679271309758614" },
   ],
   editingTimeoutInMinutes: 30,
+  roleIds: {
+    allowed: [
+    ],
+    denied: [
+      "1073396252894564403"
+    ]
+  }
 };
 
 const waitForClientThenConfigure = () => {
