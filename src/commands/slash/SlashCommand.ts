@@ -52,6 +52,6 @@ export default class SlashCommand extends Command {
   }
 
   public execute(...args: any[]) {
-    return this._configuration.execute?.call(this, ...args);
+    return this._configuration?.execute?.call(this, ...args);
   }
 }

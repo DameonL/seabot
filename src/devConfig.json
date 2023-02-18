@@ -11,7 +11,7 @@
   "autoDeleteMessages": {
     "channels": [
       {
-        "targetId": "994014273405726797",
+        "targetId": "1049745673626587277",
         "timeBeforeClearing": {
           "minutes": 5
         },
@@ -20,9 +20,9 @@
     ]
   },
   "channelIds": {
-    "DEBUG": "994014272751403105",
-    "MOD_LOG": "994014272751403105",
-    "MOD_REPORTS": "994014272751403105",
+    "DEBUG": "895476102242394135",
+    "MOD_LOG": "895476102242394135",
+    "MOD_REPORTS": "895476102242394135",
     "RANT": "994014273405726797",
     "USER_VOICE_GROUP": "994014273074372635"
   },

@@ -1,38 +1,44 @@
-import {
-  configure,
-  eventCommand,
+import eventmonkey, {
   EventMonkeyConfiguration,
-} from "@solarweb/eventmonkey";
+} from "eventmonkey";
 import { discordBot } from "../../../server";
+import {
+  daysToMilliseconds,
+  minutesToMilliseconds,
+} from "../../../utils/Time/conversion";
 import SlashCommand from "../SlashCommand";
 
-let configuration:
-  | EventMonkeyConfiguration
-  | Omit<EventMonkeyConfiguration, "discordClient"> = {
+let configuration: EventMonkeyConfiguration = {
   commandName: "seavent",
   eventTypes: [
-    { name: "Meetup", channelId: "1069270901251657849" },
-    { name: "Happening", channelId: "1069679271309758614" },
+    {
+      name: "Meetup",
+      channel: "meetups",
+      announcement: {
+        channel: "general",
+        beforeStart: minutesToMilliseconds(30),
+        onStart: true,
+      },
+    },
+    { name: "Happening", channel: "happenings" },
   ],
-  editingTimeoutInMinutes: 30,
-  roleIds: {
-    allowed: [
-    ],
-    denied: [
-      "1073396252894564403"
-    ]
-  }
+  editingTimeout: minutesToMilliseconds(30),
+  closeThreadsAfter: daysToMilliseconds(1),
+  roles: {
+    allowed: [],
+    denied: ["1073396252894564403"],
+  },
 };
 
-const waitForClientThenConfigure = () => {
-  if (discordBot && discordBot.client) {
+export const waitForClientThenConfigure = async () => {
+  if (discordBot && discordBot.client && discordBot.client.isReady()) {
     if (discordBot.client.user) {
       configuration = {
         ...configuration,
         discordClient: discordBot.client,
       };
 
-      configure(configuration);
+      await eventmonkey.configure(configuration);
       return;
     }
   }
@@ -40,11 +46,11 @@ const waitForClientThenConfigure = () => {
   setTimeout(waitForClientThenConfigure, 500);
 };
 
-configure({ ...configuration, discordClient: undefined as any });
+eventmonkey.configure({ ...configuration, discordClient: undefined as any });
 waitForClientThenConfigure();
 
 export default new SlashCommand({
   name: "seavent",
   description: "Create a server event",
-  ...eventCommand,
+  ...eventmonkey.commands.create,
 });
