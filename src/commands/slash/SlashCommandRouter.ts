@@ -42,22 +42,25 @@ export default class SlashCommandRouter extends CommandRouter {
 
     this.discordBot.client.guilds.cache.forEach(async (guild) => {
       const registeredCommands: RESTPostAPIApplicationCommandsJSONBody[] = [];
+
       for (const commandName in commands) {
         const command = commands[commandName];
-        if (command?.builder) {
+        if (command.builder) {
           registeredCommands.push(command.builder.toJSON());
         }
       }
 
-      await this.discordBot.rest.put(
-        Routes.applicationGuildCommands(
-          this.discordBot.client.user!.id,
-          guild.id
-        ),
-        {
-          body: registeredCommands,
-        }
-      );
+      if (registeredCommands.length > 0) {
+        await this.discordBot.rest.put(
+          Routes.applicationGuildCommands(
+            this.discordBot.client.user!.id,
+            guild.id
+          ),
+          {
+            body: registeredCommands,
+          }
+        );
+      }
     });
   }
 }

@@ -105,7 +105,7 @@ export const HueInitialize = async (message: Message) => {
   const { hueClientId, hueClientSecret, Constants } = Environment;
   const enabled = process.env[Environment.Constants.hueEnabled] == "true";
   if (!enabled) {
-    message.channel.send(
+    await message.reply(
       "Hue commands are currently disabled. Ask burn to turn them on pretty please"
     );
     return;
@@ -131,7 +131,7 @@ export const HueInitialize = async (message: Message) => {
       return api;
     } catch (e: any) {
       console.dir(e);
-      message.channel.send(
+      await message.reply(
         "Error connecting with access tokens, Burn may need to run `$hueInit`."
       );
     }

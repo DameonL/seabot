@@ -19,7 +19,7 @@ export default new SlashCommand({
       if (light) {
         const hex = args?.[0]?.replace(/^#/, "");
         if (!hex || !REGEX.HEX.test(hex)) {
-          message.channel.send("Please choose a valid hex color.");
+          await message.reply("Please choose a valid hex color.");
           return;
         }
         var aRgbHex = hex.match(/.{1,2}/g);

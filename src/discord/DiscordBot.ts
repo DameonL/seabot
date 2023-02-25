@@ -235,7 +235,7 @@ const modLogEntry = async (
   const modLogChannelId = configuration.channelIds?.["MOD_LOG"];
   if (!modLogChannelId) return;
   const logChannel = await guild.channels.fetch(modLogChannelId);
-  if (logChannel?.isTextBased()) {
+  if (logChannel?.isTextBased() && "send" in logChannel) {
     await logChannel.send(content);
   }
 };

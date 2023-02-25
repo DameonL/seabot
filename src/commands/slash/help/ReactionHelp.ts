@@ -65,6 +65,6 @@ export default new SlashCommand({
         },
       ],
     });
-    message.channel.send({ embeds: [embed] });
+    await message.reply({ embeds: [embed] });
   },
 });

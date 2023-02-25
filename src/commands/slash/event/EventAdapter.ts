@@ -1,6 +1,4 @@
-import eventmonkey, {
-  EventMonkeyConfiguration,
-} from "eventmonkey";
+import eventmonkey, { EventMonkeyConfiguration } from "eventmonkey";
 import { discordBot } from "../../../server";
 import {
   daysToMilliseconds,
@@ -8,25 +6,43 @@ import {
 } from "../../../utils/Time/conversion";
 import SlashCommand from "../SlashCommand";
 
+const announcement = {
+  channel: "announcements",
+  beforeStart: minutesToMilliseconds(30),
+  onStart: true,
+};
+
 let configuration: EventMonkeyConfiguration = {
   commandName: "seavent",
   eventTypes: [
     {
       name: "Meetup",
-      channel: "meetups",
-      announcement: {
-        channel: "general",
-        beforeStart: minutesToMilliseconds(30),
-        onStart: true,
-      },
+      discussionChannel: "meetups",
+      announcement,
     },
-    { name: "Happening", channel: "happenings" },
+    {
+      name: "Happening",
+      discussionChannel: "happenings",
+      announcement,
+    },
+    {
+      name: "Hangout",
+      discussionChannel: "hangouts",
+      voiceChannel: "Hangout",
+      announcement,
+    },
+    {
+      name: "Lecture",
+      discussionChannel: "lectures",
+      stageChannel: "Lecture",
+      announcement,
+    },
   ],
   editingTimeout: minutesToMilliseconds(30),
   closeThreadsAfter: daysToMilliseconds(1),
-  roles: {
-    allowed: [],
-    denied: ["1073396252894564403"],
+  timeZone: {
+    name: "PST",
+    utcOffset: -8,
   },
 };
 
@@ -52,5 +68,6 @@ waitForClientThenConfigure();
 export default new SlashCommand({
   name: "seavent",
   description: "Create a server event",
-  ...eventmonkey.commands.create,
+  builder: eventmonkey.command.builder,
+  execute: eventmonkey.command.execute,
 });

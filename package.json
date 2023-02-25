@@ -10,7 +10,7 @@
     "discord-api-types": "^0.37.17",
     "discord.js": "^14.7.1",
     "dotenv": "8.2.0",
-    "eventmonkey": "^0.0.2",
+    "eventmonkey": "^0.0.7",
     "express": "^4.17.1",
     "moment": "^2.29.4",
     "mtgsdk": "^1.0.0",
@@ -36,14 +36,13 @@
     "webpack-node-externals": "^3.0.0"
   },
   "scripts": {
-    "build": "tsc",
     "install:dist": "cd ./dist/ && npm ci --omit=dev",
-    "seabot": "node dist/seabot.js",
+    "seabot": "node seabot.js",
     "pack:dev": "rimraf ./dist/ && webpack --config-name dev && npm run install:dist",
     "pack": "rimraf ./dist/ && webpack --config-name prod && npm run install:dist",
-    "start": " npm run build && npm run seabot",
+    "start": "npm run seabot",
     "launch": "npm ci && npm start",
-    "dev": "nodemon -e ts,js,json --delay 5 --watch src --exec \"webpack --config-name dev && node dist/seabot.js\""
+    "dev": "nodemon -e ts,js,json --delay 5 --watch src --watch ../../eventmonkey/dist/ --exec \"npm install ../../eventmonkey/dist/ && webpack --config-name dev && node dist/seabot.js\""
   },
   "repository": {
     "type": "git",

@@ -17,7 +17,7 @@ export default new SlashCommand({
       process.env[Environment.Constants.hueEnabled] = enabled
         ? "true"
         : "false";
-      message.channel.send(`Hue commands: ${enabled ? "enabled" : "disabled"}`);
+        await message.reply(`Hue commands: ${enabled ? "enabled" : "disabled"}`);
     }
   },
 });
